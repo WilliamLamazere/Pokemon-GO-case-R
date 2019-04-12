@@ -1,0 +1,807 @@
+#Libraries
+
+library(corrgram)
+library(dplyr)
+library(ggplot2)
+library(tibble)
+library(tidyr)
+
+#importation of the Data
+
+customerdata = read.csv("customerdata.csv")
+summersesstrx = read.csv("summersesstrx.csv")
+customerdata = customerdata[,-1]
+summersesstrx = summersesstrx[,-1]
+
+#------------------------------- Assignment 1 -------------------------------
+
+#Question 1 : 
+
+dataset = merge(customerdata,summersesstrx,by = "CustomerID",all.x = TRUE)
+sum(is.na(dataset$PlayID)) #number of unactive customers
+
+#complet transaction table for summer session
+
+summersesstrxcomplet = dataset[!is.na(dataset$PlayID), ]
+
+
+#basetable with active cutomers & demographics
+
+customerdataactive = customerdata[ unique(summersesstrxcomplet$CustomerID) ,]
+
+#number of active customer recieving the fall bonus, 20 % of all active customers
+mean(customerdataactive$fallbonus)
+
+#Overview of the base table 
+dataset = customerdataactive
+any(is.na(dataset))
+
+summary(dataset)
+par(mfrow = c(1,2))
+hist(dataset[dataset$Sex==1,]$Age,main = "age of female players")
+hist(dataset[dataset$Sex==0,]$Age,main = "age of male players")
+
+summary(dataset[dataset$Sex==0,]$fallbonus) #proportion of females having recieved the fall bonus
+
+summary(dataset[dataset$CustomerType==1,]$fallbonus) # proportion of customer of tye 1 recieving the fall bonus
+
+corrgram(dataset, order=TRUE, lower.panel=panel.pie,
+         upper.panel=panel.pts, text.panel=panel.txt,
+         diag.panel=panel.minmax,
+         main="title")
+
+#Question 2 : Summer & Fall
+fallfintrx = read.csv("fallfintrx.csv")
+fallsesstrx = read.csv("fallsesstrx.csv")
+summerfintrx = read.csv("summerfintrx.csv")
+
+#suppresion of the importation column & rename of the "Date" columns in fall datasets : 
+fallfintrx = fallfintrx[,-1]
+colnames(fallfintrx)[2] = "TRDate"
+fallsesstrx = fallsesstrx[,-1]
+colnames(fallsesstrx)[2] = "PlayDate"
+
+#same work as in question 1, we keep the active customers in fall : 
+fallsesstrxcomplet = merge(customerdata,fallsesstrx,by = "CustomerID",all.x = TRUE)
+fallsesstrxcomplet = fallsesstrxcomplet[!is.na(fallsesstrxcomplet$PlayID),]
+
+#suppresion of the importation column & rename of the "Date" columns in summer datasets : 
+summerfintrx = summerfintrx[,-1]
+colnames(summerfintrx)[2] = "TRDate"
+colnames(summersesstrxcomplet)[9] = "PlayDate"
+
+#grouping at the day level : 
+summersesstrxcomplet_groupday = summersesstrxcomplet %>% group_by(CustomerID,PlayDate) %>% summarise(CustomerType=max(CustomerType),
+                                                                     Sex=max(Sex),
+                                                                     Age=max(Age),
+                                                                     fallbonus=max(fallbonus),
+                                                                     Income=max(Income),
+                                                                     Exp=sum(Experience),
+                                                                     Pokestops=sum(Pokestops),
+                                                                     Gyms=sum(Gyms),
+                                                                     Raids=sum(Raids),
+                                                                     Social=sum(Social),
+                                                                     Pokemons=sum(Pokemons),
+                                                                     Distance=sum(Distance),
+                                                                     Duration=sum(Duration)) %>% ungroup()
+
+fallsesstrxcomplet_groupday = fallsesstrxcomplet %>% group_by(CustomerID,PlayDate) %>% summarise(CustomerType=max(CustomerType),
+                                                                                                   Sex=max(Sex),
+                                                                                                   Age=max(Age),
+                                                                                                   fallbonus=max(fallbonus),
+                                                                                                   Income=max(Income),
+                                                                                                   Exp=sum(Experience),
+                                                                                                   Pokestops=sum(Pokestops),
+                                                                                                   Gyms=sum(Gyms),
+                                                                                                   Raids=sum(Raids),
+                                                                                                   Social=sum(Social),
+                                                                                                   Pokemons=sum(Pokemons),
+                                                                                                   Distance=sum(Distance),
+                                                                                                   Duration=sum(Duration)) %>% ungroup()
+
+
+summerfintrx = summerfintrx %>% mutate(Price=ifelse(ProductID == "1","3",
+                                                    ifelse(ProductID == "2","5",
+                                                           ifelse(ProductID == "3","10",
+                                                                  ifelse(ProductID == "4","25",
+                                                                         ifelse(ProductID == "5","100","0"))))))
+
+fallfintrx = fallfintrx %>% mutate(Price=ifelse(ProductID == "1","3",
+                                                    ifelse(ProductID == "2","5",
+                                                           ifelse(ProductID == "3","10",
+                                                                  ifelse(ProductID == "4","25",
+                                                                         ifelse(ProductID == "5","100","0"))))))
+
+summerfintrx_groupday = summerfintrx %>% group_by(CustomerID,TRDate) %>% summarise(Price=sum(as.numeric(Price))) %>% ungroup()
+unique(summerfintrx_groupday$Price) 
+#just to show that there were multiple transactions per day, aggregation was necessary
+
+fallfintrx_groupday = fallfintrx %>% group_by(CustomerID,TRDate) %>% summarise(Price=sum(as.numeric(Price))) %>% ungroup()
+
+#merge of 2 tables summer.
+merge_summer = merge(summersesstrxcomplet_groupday,summerfintrx_groupday,by.x = c("CustomerID","PlayDate"), by.y = c("CustomerID", "TRDate"),all = TRUE)
+sum(!is.na(merge_summer$Price))
+
+
+#merge of the 2 table fall : 
+
+merge_fall = merge(fallsesstrxcomplet_groupday,fallfintrx_groupday,by.x = c("CustomerID","PlayDate"), by.y = c("CustomerID", "TRDate"),all = TRUE)
+sum(!is.na(merge_fall$Price))
+
+#Nas management
+
+merge_summer$Pokemons[is.na(merge_summer$Pokemons)]=0
+merge_summer$Exp[is.na(merge_summer$Exp)]=0
+merge_summer$Pokestops[is.na(merge_summer$Pokestops )]=0
+merge_summer$Gyms[is.na(merge_summer$Gyms )]=0
+merge_summer$Raids[is.na(merge_summer$Raids )]=0
+merge_summer$Social[is.na(merge_summer$Social )]=0
+merge_summer$Distance[is.na(merge_summer$Distance)]=0
+merge_summer$Duration[is.na(merge_summer$Duration)]=0
+merge_summer$Price[is.na(merge_summer$Price)]=0
+merge_summer$Age[is.na(merge_summer$Age)]=0
+merge_summer$Sex[is.na(merge_summer$Sex)]=3
+merge_summer$Income[is.na(merge_summer$Income)]=0
+merge_summer$CustomerType[is.na(merge_summer$CustomerType)]=0
+
+
+#scaling the variable related to playing session
+
+merge_summer$Pokemons= scale(merge_summer$Pokemons)
+merge_summer$Exp= scale(merge_summer$Exp)
+merge_summer$Pokestops= scale(merge_summer$Pokestops )
+merge_summer$Gyms= scale(merge_summer$Gyms )
+merge_summer$Raids= scale(merge_summer$Raids )
+merge_summer$Social= scale(merge_summer$Social )
+merge_summer$Distance= scale(merge_summer$Distance)
+merge_summer$Duration= scale(merge_summer$Duration)
+
+
+
+
+#Question 2 : RFM
+
+RFM <- function(df) {
+  
+  newdf=df %>%
+    group_by(CustomerID) %>%
+    summarise(Frequency=n(),
+              Recency=max(as.numeric(PlayDate)),
+              Monetaryvalue= sum(Price),
+              Playvalue = sum(Pokemons+Pokestops+Exp+Gyms+Raids+Social+Distance+Duration),
+              Age = max(Age),
+              Sex = min(Sex),
+              Income = max(Income),
+              Type = max(CustomerType))%>%
+    ungroup()#ungroup back to store as dataframe
+  return(newdf)
+} 
+
+
+generalprofil = RFM(merge_summer)
+
+
+#regression to see which variables are significants
+
+prof = lm(Monetaryvalue ~.,data=generalprofil)
+
+
+# Question 3 :
+
+
+#CLV
+calc_clv = function(margin,r,d,acquisition,t) {
+  clv = -acquisition
+  for(i in 0:t)#attention: start in month 0
+  {
+    clv = clv+((r^i)*margin/(1+d)^i)
+  }
+  return (clv)
+}
+
+# assumptions for CLV calculation : 
+# 1) margin m consists in a weighted sum of the monetary value and the potential monetary value (aka Playvalue)
+# 2) retention rate is hard to predict as we only have data on summer and fall, assigment 3 will help to have a better value of the retention rate
+# 3) for now, we use r = 43% after 1 month (source Localytics 2017)
+# 4) On average, we assume that pokemon go players will remain players for 12 months
+# 5) 3,75 dollars/customer for the acquisition cost for app install (source mobile gaming apps report 2018)
+
+generalprofil$clv = apply(generalprofil[,c("Frequency","Recency","Monetaryvalue","Playvalue")],1,function(x) calc_clv((3*x[3]+2*x[4])/5,0.43,0.02,3.75,12))
+summary(generalprofil$clv) 
+hist(generalprofil$clv,breaks = 20, xlim = c(-40,30), main="Value of customer over life time",xlab="CLV value")
+
+
+
+
+#-------------------------------Assignment 2 : Lifecycle grids--------------------------------------
+
+#To better understand playing patterns, we first decided to focus on the summer time, when the  game play peaks occur. We built LifeCycle Grids on the two following dimensions : the frequency and the recency of play time.
+today <- max(as.numeric(merge_summer$PlayDate))
+
+summernew <- merge_summer %>%
+  group_by(CustomerID) %>%
+  mutate(frequency=n(),
+         recency=today-as.numeric(PlayDate)) %>%
+  filter(recency==max(recency)) %>%
+  filter(CustomerID==max(CustomerID)) %>%
+  ungroup()
+
+#We drop the NA values in the Sex column as we will analyse the data according to gender further on.
+summernew <- summernew %>% drop_na(Sex)
+
+#We plot the frequency and recency of play.
+
+ggplot(summernew, aes(x=frequency)) +
+  theme_bw() +
+  scale_x_continuous(breaks=c(1:10)) +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by frequency")
+
+ggplot(summernew, aes(x=recency)) +
+  theme_bw() +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by recency")
+
+summer.segm <- summernew %>%
+  mutate(segm.freq=ifelse(between(frequency, 1, 1), '1',
+                          ifelse(between(frequency, 2, 2), '2',
+                                 ifelse(between(frequency, 3, 3), '3',
+                                        ifelse(between(frequency, 4, 4), '4',
+                                               ifelse(between(frequency, 5, 5), '5',
+                                                      '>5')))))) %>%
+  mutate(segm.rec=ifelse(between(recency, 0, 20), '0-20 days',
+                         ifelse(between(recency, 21, 40), '21-40 days',
+                                ifelse(between(recency, 41, 60), '41-60 days',
+                                       ifelse(between(recency, 61, 80), '61-80 days',
+                                              ifelse(between(recency, 81, 100), '81-100 days', '>100 	days')))))) %>%
+  arrange(CustomerID)
+
+# defining order of boundaries
+summer.segm$segm.freq <- factor(summer.segm$segm.freq, levels=c('>5','5', '4', '3', '2', '1'))
+summer.segm$segm.rec <- factor(summer.segm$segm.rec, levels=c('>100 days', '81-100 days', '61-80 days', '41-60 days', '21-40 days', '0-20 days'))
+
+#We draw a first basic LifeCycle Grids.
+
+lcg_summer <- summer.segm %>%
+  group_by(segm.rec, segm.freq) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer, aes(x=player, y=quantity, fill=quantity))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity', alpha=0.6) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=3) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids")
+
+#We decide to highlight the four categories of players (recent/not recent/frequent/infrequent).
+
+lcg_summer.adv <- lcg_summer %>%
+  mutate(rec.type = ifelse(segm.rec %in% c(">100 days", "81-100 days", "61-80 days"), "not recent", "recent"),
+         freq.type = ifelse(segm.freq %in% c(">5", "5", "4"), "frequent", "infrequent"),
+         customer.type = interaction(rec.type, freq.type)) %>%
+  ungroup()
+
+
+ggplot(lcg_summer.adv, aes(x=player, y=quantity, fill=customer.type)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  geom_rect(aes(fill = customer.type), xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.1) +
+  facet_grid(segm.freq ~ segm.rec) +
+  geom_bar(stat='identity', alpha=0.7) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=4) +
+  ggtitle("LifeCycle Grids")
+
+#We decide to do LifeCycle Grids according to gender to see any differences.
+
+lcg_summer2 <- summer.segm %>%
+  mutate(gender=ifelse(Sex==0, "male", "female"))%>%
+  group_by(segm.rec, segm.freq, gender) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer2, aes(x=player, y=quantity, fill=gender))+
+  theme_bw() +
+  scale_fill_brewer(palette='Set1') +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity', position="fill", alpha=0.6) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by gender (proportion)")
+
+#We plot a second time by gender to check the figures
+lcg_summer2bis <- summer.segm %>%
+  mutate(gender=ifelse(Sex==0, "male", "female"))%>%
+  group_by(segm.rec, segm.freq, gender) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer2bis, aes(x=player, y=quantity, fill=gender))+
+  theme_bw() +
+  scale_fill_brewer(palette='Set1') +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity', alpha=0.6) +
+  geom_text(aes(y=quantity, label=round(quantity,0), color = gender), size=4)+
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by gender")
+
+#We do LifeCycle Grids according to customer type
+
+lcg_summer3 <- summer.segm %>%
+  group_by(segm.rec, segm.freq, customer_type = as.factor(CustomerType)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer3, aes(x=customer_type, fill=customer_type))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity', alpha=0.5) +
+  geom_text(aes(y=quantity, label=round(quantity,0)), size=4)+
+  facet_grid(segm.freq ~ segm.rec)+
+  theme(axis.text.x=element_text(hjust=.5, vjust=.5, face="plain")) +
+  ggtitle("LifeCycle Grids by customer type")
+
+#We do another Grids by proportion, but it is less readable
+lcg_summer3bis <- summer.segm %>%
+  group_by(segm.rec, segm.freq, customer_type = as.factor(CustomerType)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer3bis, aes(x=player, fill=customer_type))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity', position = "fill", alpha=0.5) +
+  facet_grid(segm.freq ~ segm.rec)+
+  theme(axis.text.x=element_text(hjust=.5, vjust=.5, face="plain")) +
+  ggtitle("LifeCycle Grids by customer type (proportion)")
+
+# We check the differences by gender and customer type
+lcg_summer4 <- summer.segm %>%
+  mutate(gender=ifelse(Sex==0, "male", "female"))%>%
+  group_by(segm.rec, segm.freq, customer_type = as.factor(CustomerType), gender) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer4, aes(x=gender, fill=customer_type))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity', position = 'fill', alpha=0.5) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by gender and customer type (proportion) ")
+
+# We check if the revenues have any impact
+lcg_summer5 <- summer.segm %>%
+  group_by(segm.rec, segm.freq, income = as.factor(Income)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer5, aes(x=player, fill=income))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity',position = 'fill',  alpha=0.5) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by income")
+
+# We do a LifeCycle Grids by income and customer type. No clear trend can be defined
+lcg_summer6 <- summer.segm %>%
+  group_by(segm.rec, segm.freq, income = as.factor(Income), customer_type = as.factor(CustomerType)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_summer6, aes(x=income, fill=customer_type))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity',position = 'fill',  alpha=0.5) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by income and customer type (proportion)")
+
+#We decided then to build LifeCycle Grids on the two following dimensions : the frequency and the recency of pay.
+
+today <- max(as.numeric(merge_summer$PlayDate))
+
+summernew_pay <- merge_summer %>%
+  drop_na(Price) %>%
+  group_by(CustomerID) %>%
+  mutate(frequency=n(),
+         recency= today-as.numeric(PlayDate)) %>%
+  filter(recency==max(recency)) %>%
+  filter(CustomerID==max(CustomerID)) %>%
+  ungroup()
+
+ggplot(summernew_pay, aes(x=frequency)) +
+  theme_bw() +
+  scale_x_continuous(breaks=c(1:10)) +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by frequency")
+
+ggplot(summernew_pay, aes(x=recency)) +
+  theme_bw() +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by recency")
+
+
+summer_pay.segm <- summernew_pay %>%
+  mutate(segm.freq=ifelse(between(frequency, 1, 1), '1',
+                          ifelse(between(frequency, 2, 2), '2',
+                                 ifelse(between(frequency, 3, 3), '3',
+                                        '>3')))) %>%
+  mutate(segm.rec=ifelse(between(recency, 0, 20), '0-20 days',
+                         ifelse(between(recency, 21, 40), '21-40 days',
+                                ifelse(between(recency, 41, 60), '41-60 days',
+                                       ifelse(between(recency, 61, 80), '61-80 days',
+                                              ifelse(between(recency, 81, 100), '81-100 days', '>100 days')))))) %>%
+  arrange(CustomerID)
+
+
+# defining order of boundaries
+summer_pay.segm$segm.freq <- factor(summer_pay.segm$segm.freq, levels=c('>3', '3', '2', '1'))
+summer_pay.segm$segm.rec <- factor(summer_pay.segm$segm.rec, levels=c('>100 days', '81-100 days', '61-80 days', '41-60 days', '21-40 days', '0-20 days'))
+
+lcg_pay <- summer_pay.segm %>%
+  group_by(segm.rec, segm.freq) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_pay, aes(x=player, y=quantity, fill=quantity))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity', alpha=0.6) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=3) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids")
+
+
+# We decide to highlight the different categories. We could not analyse further on as there are a lot of missing values for the players that have purchased.
+
+lcg_pay.adv <- lcg_pay %>%
+  mutate(rec.type = ifelse(segm.rec %in% c(">100 days", "81-100 days", "61-80 days"), "not recent", "recent"),
+         freq.type = ifelse(segm.freq %in% c(">3", "3"), "frequent", "infrequent"),
+         customer.type = interaction(rec.type, freq.type)) %>%
+  ungroup()
+
+
+ggplot(lcg_pay.adv, aes(x=player, y=quantity, fill=customer.type)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  geom_rect(aes(fill = customer.type), xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.1) +
+  facet_grid(segm.freq ~ segm.rec) +
+  geom_bar(stat='identity', alpha=0.7) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=4) +
+  ggtitle("LifeCycle Grids")
+
+# We tried to analyse the LifeCycle Grids according to the amount of the transactions but it's not very readable.
+lcg_pay2 <- summer_pay.segm %>%
+  group_by(segm.rec, segm.freq, Price) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_pay2, aes(x=Price, fill=quantity))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity', alpha=0.6) +
+  geom_text(aes(y=quantity, label=round(quantity,0)), size=4)+
+  facet_grid(segm.freq ~ segm.rec)+
+  theme(axis.text.x=element_text(hjust=.7, vjust=.5, face="plain")) +
+  ggtitle("LifeCycle Grids")
+
+#We then focused on the fall time, with the following two variables : frequency and recency of play.
+
+today <- max(as.numeric(merge_fall$PlayDate))
+
+fallnew <- merge_fall %>%
+  group_by(CustomerID) %>%#find unique customers
+  mutate(frequency=n(),#create frequency and recency for them
+         recency=today-as.numeric(PlayDate)) %>%
+  filter(recency==max(recency)) %>%#pick latest order of each customer
+  filter(CustomerID==max(CustomerID)) %>%#cut ties if two or more orders occured on the same day
+  ungroup()#ungroup back to store as dataframe
+
+# We again remove the NA values from the column Sex
+fallnew <- fallnew %>% drop_na(Sex)
+
+ggplot(fallnew, aes(x=frequency)) +
+  theme_bw() +
+  scale_x_continuous(breaks=c(1:10)) +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by frequency")
+
+ggplot(fallnew, aes(x=recency)) +
+  theme_bw() +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by recency")
+
+fall.segm <- fallnew %>%
+  mutate(segm.freq=ifelse(between(frequency, 1, 1), '1',
+                          ifelse(between(frequency, 2, 2), '2',
+                                 ifelse(between(frequency, 3, 3), '3', '>3')))) %>%
+  mutate(segm.rec=ifelse(between(recency, 0, 15), '0-15 days',
+                         ifelse(between(recency, 16, 30), '16-30 days',
+                                ifelse(between(recency, 31, 45), '31-45 days', '>45 days')))) %>%
+  arrange(CustomerID)
+
+# defining order of boundaries
+fall.segm$segm.freq <- factor(fall.segm$segm.freq, levels=c('>3','3', '2', '1'))
+fall.segm$segm.rec <- factor(fall.segm$segm.rec, levels=c('>45 days', '31-45 days', '16-30 days', '0-15 days'))
+
+lcg_fall <- fall.segm %>%
+  group_by(segm.rec, segm.freq) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_fall, aes(x=player, y=quantity, fill=quantity))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity', alpha=0.6) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=3) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids")
+
+lcg_fall.adv <- lcg_fall %>%
+  mutate(rec.type = ifelse(segm.rec %in% c(">45 days", "31-45 days"), "not recent", "recent"),
+         freq.type = ifelse(segm.freq %in% c(">3", "3"), "frequent", "infrequent"),
+         customer.type = interaction(rec.type, freq.type)) %>%
+  ungroup()
+
+
+ggplot(lcg_fall.adv, aes(x=player, y=quantity, fill=customer.type)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  geom_rect(aes(fill = customer.type), xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.1) +
+  facet_grid(segm.freq ~ segm.rec) +
+  geom_bar(stat='identity', alpha=0.7) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=4) +
+  ggtitle("LifeCycle Grids")
+
+#We want to check the influence of the fall bonus. Nothing signifcative come up
+lcg_fallbis <- fall.segm %>%
+  drop_na(fallbonus)%>%
+  group_by(segm.rec, segm.freq, bonus = as.factor(fallbonus)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_fallbis, aes(x=player, y=quantity, fill=bonus))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity',position = "fill", alpha=0.6) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids")
+
+lcg_fall2 <- fall.segm %>%
+  mutate(gender=ifelse(Sex==0, "male", "female"))%>%
+  group_by(segm.rec, segm.freq, gender) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_fall2, aes(x=player, y=quantity, fill=gender))+
+  theme_bw() +
+  scale_fill_brewer(palette='Set1') +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity', position="fill", alpha=0.6) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by gender (proportion)")
+
+lcg_fall3 <- fall.segm %>%
+  group_by(segm.rec, segm.freq, customer_type = as.factor(CustomerType)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_fall3, aes(x=customer_type, fill=customer_type))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity', alpha=0.5) +
+  geom_text(aes(y=quantity, label=round(quantity,0)), size=4)+
+  facet_grid(segm.freq ~ segm.rec)+
+  theme(axis.text.x=element_text(hjust=.5, vjust=.5, face="plain")) +
+  ggtitle("LifeCycle Grids by customer type")
+
+lcg_fall3bis <- fall.segm %>%
+  group_by(segm.rec, segm.freq, customer_type = as.factor(CustomerType)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_fall3bis, aes(x=player, fill=customer_type))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity', position = "fill", alpha=0.5) +
+  facet_grid(segm.freq ~ segm.rec)+
+  theme(axis.text.x=element_text(hjust=.5, vjust=.5, face="plain")) +
+  ggtitle("LifeCycle Grids by customer type (proportion)")
+
+lcg_fall4 <- fall.segm %>%
+  mutate(gender=ifelse(Sex==0, "male", "female"))%>%
+  group_by(segm.rec, segm.freq, customer_type = as.factor(CustomerType), gender) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_fall4, aes(x=gender, fill=customer_type))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity', position = 'fill', alpha=0.5) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by gender and customer type (proportion) ")
+
+lcg_fall5 <- fall.segm %>%
+  drop_na(Income)  %>%
+  group_by(segm.rec, segm.freq, income = as.factor(Income)) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_fall5, aes(x=player, fill=income))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(aes(y=quantity), stat='identity',position = 'fill',  alpha=0.5) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids by income (proportion)")
+
+#We now analyse the frequency and recency of purchase
+today <- max(as.numeric(merge_fall$PlayDate))
+
+fallnew_pay <- merge_fall %>%
+  drop_na(Price) %>%
+  group_by(CustomerID) %>%
+  mutate(frequency=n(),
+         recency= today-as.numeric(PlayDate)) %>%
+  filter(recency==max(recency)) %>%
+  filter(CustomerID==max(CustomerID)) %>%
+  ungroup()
+
+ggplot(fallnew_pay, aes(x=frequency)) +
+  theme_bw() +
+  scale_x_continuous(breaks=c(1:10)) +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by frequency")
+
+ggplot(fallnew_pay, aes(x=recency)) +
+  theme_bw() +
+  geom_bar(alpha=0.6) +
+  ggtitle("Distribution by recency")
+
+fall_pay.segm <- fallnew_pay %>%
+  mutate(segm.freq=ifelse(between(frequency, 1, 1), '1',
+                          ifelse(between(frequency, 2, 2), '2',
+                                 ifelse(between(frequency, 3, 3), '3',
+                                        '>3')))) %>%
+  mutate(segm.rec=ifelse(between(recency, 0, 30), '0-30 days',
+                         ifelse(between(recency, 31, 45), '31-45 days', '>45 days'))) %>%
+  arrange(CustomerID)
+
+# defining order of boundaries
+fall_pay.segm$segm.freq <- factor(fall_pay.segm$segm.freq, levels=c('>3', '3', '2', '1'))
+fall_pay.segm$segm.rec <- factor(fall_pay.segm$segm.rec, levels=c('>45 days', '31-45 days', '0-30 days'))
+
+lcg_payfall <- fall_pay.segm %>%
+  group_by(segm.rec, segm.freq) %>%
+  summarise(quantity=n()) %>%
+  mutate(player='player') %>%
+  ungroup()
+
+ggplot(lcg_payfall, aes(x=player, y=quantity, fill=quantity))+
+  theme_bw() +
+  theme(panel.grid = element_blank())+
+  geom_bar(stat='identity', alpha=0.6) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=3) +
+  facet_grid(segm.freq ~ segm.rec)+
+  ggtitle("LifeCycle Grids")
+
+lcg_payfall.adv <- lcg_payfall %>%
+  mutate(rec.type = ifelse(segm.rec %in% c(">45 days", "31-45 days"), "not recent", "recent"),
+         freq.type = ifelse(segm.freq %in% c(">3", "3"), "frequent", "infrequent"),
+         customer.type = interaction(rec.type, freq.type)) %>%
+  ungroup()
+
+
+ggplot(lcg_payfall.adv, aes(x=player, y=quantity, fill=customer.type)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  geom_rect(aes(fill = customer.type), xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.1) +
+  facet_grid(segm.freq ~ segm.rec) +
+  geom_bar(stat='identity', alpha=0.7) +
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=4) +
+  ggtitle("LifeCycle Grids")
+
+
+
+#------------------------------- Assignment 3 -------------------------------
+
+
+## Question 1 
+
+# Churn Analysis 
+
+# Customers "active" during summer (performing microtransactions)
+
+summeractives_customers_fintrx = summerfintrx %>% group_by(CustomerID) %>% summarise(TransID = max(TransID))  %>% select(-c(TransID)) %>% arrange(CustomerID)
+
+nrow(summeractives_customers_fintrx)
+
+
+# Churners in financial transactions between summer and fall 
+
+churn_fintrx = merge(summeractives_customers_fintrx,fallfintrx,by = "CustomerID",all.x = TRUE)
+
+#Column churn with 1 for churners, 0 for not churners 
+
+churn_fintrx = churn_fintrx %>% group_by(CustomerID) %>%  summarise(TransID = max(TransID)) %>% mutate(churn = ifelse(is.na(TransID), 1, 0)) %>% select(-c(TransID))
+
+head(churn_fintrx)
+nrow(churn_fintrx)
+
+summary(churn_fintrx$churn)
+
+
+# Same process for session transactions (playing)
+
+summeractives_sesstrx = summersesstrx %>% group_by(CustomerID) %>% summarise(PlayID = max(PlayID))  %>% select(-c(PlayID)) %>% arrange(CustomerID)
+
+nrow(summeractives_sesstrx)
+
+# Churners between summer and fall 
+
+churn_sesstrx = merge(summeractives_sesstrx,fallsesstrx,by = "CustomerID",all.x = TRUE)
+
+#Column churn with 1 for churners, 0 for not churners 
+
+churn_sesstrx = churn_sesstrx %>% group_by(CustomerID) %>%  summarise(PlayID = max(PlayID)) %>% mutate(churn = ifelse(is.na(PlayID), 1, 0)) %>% select(-c(PlayID))
+
+head(churn_sesstrx)
+nrow(churn_sesstrx)
+
+nrow(churn_sesstrx$churn)
+
+
+## Question 2 
+
+# Table with fall bonus and customer type 
+
+customer_fallbonus = customerdata %>% select(-c(Registrationdate,Sex,Age,Income))
+head(customer_fallbonus)                                           
+
+
+#Merge financial churn info with the other variables 
+
+generalprofil = merge(generalprofil, customer_fallbonus, by = "CustomerID", all.x = FALSE)
+
+generalprofil_finchurners = merge(generalprofil,churn_fintrx,by = "CustomerID")
+
+summary(generalprofil_finchurners)
+
+# Merge session churn info with other variables 
+
+generalprofil_sesschurners = merge(generalprofil,churn_sesstrx,by = "CustomerID")
+
+summary(generalprofil_sesschurners)
+nrow(generalprofil_sesschurners)
+
+
+finchurn_model = glm(formula = churn ~ ., family = "binomial", data = generalprofil_finchurners)
+summary(finchurn_model)
+
+sesschurn_model = glm(formula = churn ~ ., family = "binomial", data = generalprofil_sesschurners)
+summary(sesschurn_model)
+
+summary(generalprofil_sesschurners[generalprofil_sesschurners[,"CustomerType"]== 1,]$churn)
+
+summary(generalprofil_sesschurners[generalprofil_sesschurners[,"CustomerType"]== 2,]$churn)
+
+summary(generalprofil_sesschurners[generalprofil_sesschurners[,"CustomerType"]== 3,]$churn)
+
+summary(generalprofil_sesschurners[generalprofil_sesschurners[,"CustomerType"]== 4,]$churn)
+
+
